@@ -16,9 +16,7 @@ module Logic =
     
     let aStarts, aBounds =
         let data = [|
-            0, 2
-            3, 5
-            12, 14
+            2, 10
         |]        
         let aStarts = data |> Array.map fst
         let aBounds = data |> Array.map snd
@@ -40,30 +38,31 @@ module Logic =
         let bBounds = data |> Array.map snd
         bStarts, bBounds
     
-    let leftCompactShuffleMasks =
+    let leftCompactShuffleMasks : Vector128<byte>[] =
+        // NOTE: Remember x86 is little-endian therefore we need to select
         let remv = 0x80_80_80_80 // Remove values
-        let pos0 = 0x00_01_02_03 // 0th position
-        let pos1 = 0x04_05_06_07 // 1st position
-        let pos2 = 0x08_09_0A_0B // 2nd position
-        let pos3 = 0x0C_0D_0E_0F // 3rd position
+        let pos0 = 0x03_02_01_00 // 0th position
+        let pos1 = 0x07_06_05_04 // 1st position
+        let pos2 = 0x0B_0A_09_08 // 2nd position
+        let pos3 = 0x0F_0E_0D_0C // 3rd position
         
-        [|
+        retype [|
             Vector128.Create (remv, remv, remv, remv) // BitMask Pattern: 0000
             Vector128.Create (pos0, remv, remv, remv) // BitMask Pattern: 0001
-            Vector128.Create (remv, remv, pos0, remv)// BitMask Pattern: 0010
-            Vector128.Create (remv, remv, pos0, pos1)// BitMask Pattern: 0011
-            Vector128.Create (remv, pos0, remv, remv)// BitMask Pattern: 0100
-            Vector128.Create (remv, pos0, remv, pos1)// BitMask Pattern: 0101
-            Vector128.Create (remv, pos0, pos1, remv)// BitMask Pattern: 0110
-            Vector128.Create (remv, pos0, pos1, pos3)// BitMask Pattern: 0111
-            Vector128.Create (pos0, remv, remv, remv)// BitMask Pattern: 1000
-            Vector128.Create (pos0, remv, remv, pos1)// BitMask Pattern: 1001
-            Vector128.Create (pos0, remv, pos1, remv)// BitMask Pattern: 1010
-            Vector128.Create (pos0, remv, pos1, pos2)// BitMask Pattern: 1011
-            Vector128.Create (pos0, pos1, remv, remv)// BitMask Pattern: 1100
-            Vector128.Create (pos0, pos1, remv, pos2)// BitMask Pattern: 1101
-            Vector128.Create (pos0, pos1, pos2, remv)// BitMask Pattern: 1110
-            Vector128.Create (pos0, pos1, pos2, pos3)// BitMask Pattern: 1111
+            Vector128.Create (remv, pos0, remv, remv) // BitMask Pattern: 0010
+            Vector128.Create (pos0, pos1, remv, remv) // BitMask Pattern: 0011
+            Vector128.Create (remv, remv, pos0, remv) // BitMask Pattern: 0100
+            Vector128.Create (pos0, remv, pos0, remv) // BitMask Pattern: 0101
+            Vector128.Create (remv, pos0, pos1, remv) // BitMask Pattern: 0110
+            Vector128.Create (pos0, pos1, pos2, remv) // BitMask Pattern: 0111
+            Vector128.Create (remv, remv, remv, pos0) // BitMask Pattern: 1000
+            Vector128.Create (pos0, remv, remv, pos1) // BitMask Pattern: 1001
+            Vector128.Create (remv, pos0, remv, pos1) // BitMask Pattern: 1010
+            Vector128.Create (pos0, pos1, remv, pos2) // BitMask Pattern: 1011
+            Vector128.Create (remv, remv, pos0, pos1) // BitMask Pattern: 1100
+            Vector128.Create (pos0, remv, pos1, pos2) // BitMask Pattern: 1101
+            Vector128.Create (remv, pos0, pos1, pos2) // BitMask Pattern: 1110
+            Vector128.Create (pos0, pos1, pos2, pos3) // BitMask Pattern: 1111
             
         |]
     
@@ -97,10 +96,10 @@ module Logic =
         let nonNegativeCheck = Avx2.CompareGreaterThan (newBounds, newStarts)
         
         // Retype so we can use MoveMask
-        let nonNegativeCheck : Vector128<float32> = retype nonNegativeCheck
+        let nonNegativeCheckAsFloat32 : Vector128<float32> = retype nonNegativeCheck
         
         // Compute the MoveMask to lookup Left-Compacting shuffle mask
-        let moveMask = Avx2.MoveMask nonNegativeCheck
+        let moveMask = Avx2.MoveMask nonNegativeCheckAsFloat32
         // Lookup the Left-Compacting shuffle mask we will need
         let shuffleMask = leftCompactShuffleMasks[moveMask]
         
@@ -109,12 +108,12 @@ module Logic =
         let numberOfMatches = BitOperations.PopCount moveMask
         
         // Retype newStarts and newBounds for shuffling
-        let newStarts : Vector128<byte> = retype newStarts
-        let newBounds : Vector128<byte> = retype newBounds
+        let newStartsAsBytes : Vector128<byte> = retype newStarts
+        let newBoundsAsBytes : Vector128<byte> = retype newBounds
         
         // Shuffle the values that we want to keep
-        let newStartsPacked : Vector128<int> = retype (Avx2.Shuffle (newStarts, shuffleMask))
-        let newBoundsPacked : Vector128<int> = retype (Avx2.Shuffle (newBounds, shuffleMask))
+        let newStartsPacked : Vector128<int> = retype (Avx2.Shuffle (newStartsAsBytes, shuffleMask))
+        let newBoundsPacked : Vector128<int> = retype (Avx2.Shuffle (newBoundsAsBytes, shuffleMask))
         
         // Write the values out to the acc arrays
         Avx2.Store (NativePtr.add accStartsPtr accIdx, newStartsPacked)
