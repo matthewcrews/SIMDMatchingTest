@@ -1,5 +1,4 @@
-﻿
-open System
+﻿open System
 open System.Buffers
 open System.Numerics
 open System.Runtime.Intrinsics
@@ -42,7 +41,7 @@ module Logic =
         // NOTE: Remember x86 is little-endian therefore we need to select
         // Also note, we are using this with Shuffle, which should be thought
         // of as a Selector of the elements, not masking elements off.
-        let zero = 0x80_80_80_80 // Remove values
+        let zero = 0x80_80_80_80 // Zero
         let elm0 = 0x03_02_01_00 // 0th position
         let elm1 = 0x07_06_05_04 // 1st position
         let elm2 = 0x0B_0A_09_08 // 2nd position
@@ -76,59 +75,88 @@ module Logic =
         let mutable aIdx = 0
         let mutable bIdx = 0
         
-        let aStartsPtr = && aStarts.AsSpan().GetPinnableReference()
-        let aBoundsPtr = && aBounds.AsSpan().GetPinnableReference()
-        let bStartsPtr = && bStarts.AsSpan().GetPinnableReference()
-        let bBoundsPtr = && bBounds.AsSpan().GetPinnableReference()
-        let accStartsPtr = && accStarts.AsSpan().GetPinnableReference()
-        let accBoundsPtr = && accBounds.AsSpan().GetPinnableReference()
+        // Only want to perform this loop if Avx2 is supported
+        if Avx2.IsSupported then
+            
+            let lastBlockIdx = Vector128<int>.Count * (bStarts.Length / Vector128<int>.Count)
+            let bStartsPtr = && bStarts.AsSpan().GetPinnableReference()
+            let bBoundsPtr = && bBounds.AsSpan().GetPinnableReference()
+            let accStartsPtr = && accStarts.AsSpan().GetPinnableReference()
+            let accBoundsPtr = && accBounds.AsSpan().GetPinnableReference()
+            
+            while aIdx < aStarts.Length && bIdx < lastBlockIdx do
+
+                // Load the data into the SIMD registers
+                let aStartVec = Vector128.Create aStarts[aIdx]
+                let aBoundVec = Vector128.Create aBounds[aIdx]
+                let bStartsVec = Avx2.LoadVector128 (NativePtr.add bStartsPtr bIdx)
+                let bBoundsVec = Avx2.LoadVector128 (NativePtr.add bBoundsPtr bIdx)
+                
+                // Compute new Starts and Bounds
+                let newStarts = Avx2.Max (aStartVec, bStartsVec)
+                let newBounds = Avx2.Min (aBoundVec, bBoundsVec)
+                
+                // Perform comparison to check for valid intervals
+                let nonNegativeCheck = Avx2.CompareGreaterThan (newBounds, newStarts)
+                
+                // Retype so we can use MoveMask
+                let nonNegativeCheckAsFloat32 : Vector128<float32> = retype nonNegativeCheck
+                
+                // Compute the MoveMask to lookup Left-Compacting shuffle mask
+                let moveMask = Avx2.MoveMask nonNegativeCheckAsFloat32
+                // Lookup the Left-Compacting shuffle mask we will need
+                let shuffleMask = leftCompactShuffleMasks[moveMask]
+                
+                // Retype moveMask to use it with PopCount to get number of matches
+                let moveMask : uint32 = retype moveMask
+                let numberOfMatches = BitOperations.PopCount moveMask
+                
+                // Retype newStarts and newBounds for shuffling
+                let newStartsAsBytes : Vector128<byte> = retype newStarts
+                let newBoundsAsBytes : Vector128<byte> = retype newBounds
+                
+                // Shuffle the values that we want to keep
+                let newStartsPacked : Vector128<int> = retype (Avx2.Shuffle (newStartsAsBytes, shuffleMask))
+                let newBoundsPacked : Vector128<int> = retype (Avx2.Shuffle (newBoundsAsBytes, shuffleMask))
+                
+                // Write the values out to the acc arrays
+                Avx2.Store (NativePtr.add accStartsPtr accIdx, newStartsPacked)
+                Avx2.Store (NativePtr.add accBoundsPtr accIdx, newBoundsPacked)
+                
+                // Move the accIdx forward so that we write new matches to the correct spot
+                accIdx <- accIdx + numberOfMatches
+                if aBounds[aIdx] < bBounds[bIdx + Vector128<int>.Count - 1] then
+                    aIdx <- aIdx + 1
+                else
+                    bIdx <- bIdx + Vector128<int>.Count
+            
+        while aIdx < aStarts.Length && bIdx < bStarts.Length do
+            
+            if aBounds[aIdx] < bStarts[bIdx] then
+                aIdx <- aIdx + 1
+            elif bBounds[bIdx] < aStarts[aIdx] then
+                bIdx <- bIdx + 1
+            else
+                accStarts[accIdx] <- Math.Max (aStarts[aIdx], bStarts[bIdx])
+                accBounds[accIdx] <- Math.Min (aBounds[aIdx], bBounds[bIdx])
+                accIdx <- accIdx + 1
+                
+                if aBounds[aIdx] < bBounds[bIdx] then
+                    aIdx <- aIdx + 1
+                else
+                    bIdx <- bIdx + 1
+                    
+        let resStarts = GC.AllocateUninitializedArray accIdx
+        let resBounds = GC.AllocateUninitializedArray accIdx
+            
+        Array.Copy (accStarts, resStarts, accIdx)
+        Array.Copy (accBounds, resBounds, accIdx)
         
-        // Load the data into the SIMD registers
-        let aStartVec = Avx2.BroadcastScalarToVector128 (NativePtr.add aStartsPtr aIdx)
-        let aBoundVec = Avx2.BroadcastScalarToVector128 (NativePtr.add aBoundsPtr aIdx)
-        let bStartsVec = Avx2.LoadVector128 (NativePtr.add bStartsPtr bIdx)
-        let bBoundsVec = Avx2.LoadVector128 (NativePtr.add bBoundsPtr bIdx)
-        
-        // Compute new Starts and Bounds
-        let newStarts = Avx2.Max (aStartVec, bStartsVec)
-        let newBounds = Avx2.Min (aBoundVec, bBoundsVec)
-        
-        // Perform comparison to check for valid intervals
-        let nonNegativeCheck = Avx2.CompareGreaterThan (newBounds, newStarts)
-        
-        // Retype so we can use MoveMask
-        let nonNegativeCheckAsFloat32 : Vector128<float32> = retype nonNegativeCheck
-        
-        // Compute the MoveMask to lookup Left-Compacting shuffle mask
-        let moveMask = Avx2.MoveMask nonNegativeCheckAsFloat32
-        // Lookup the Left-Compacting shuffle mask we will need
-        let shuffleMask = leftCompactShuffleMasks[moveMask]
-        
-        // Retype moveMask to use it with PopCount to get number of matches
-        let moveMask : uint32 = retype moveMask
-        let numberOfMatches = BitOperations.PopCount moveMask
-        
-        // Retype newStarts and newBounds for shuffling
-        let newStartsAsBytes : Vector128<byte> = retype newStarts
-        let newBoundsAsBytes : Vector128<byte> = retype newBounds
-        
-        // Shuffle the values that we want to keep
-        let newStartsPacked : Vector128<int> = retype (Avx2.Shuffle (newStartsAsBytes, shuffleMask))
-        let newBoundsPacked : Vector128<int> = retype (Avx2.Shuffle (newBoundsAsBytes, shuffleMask))
-        
-        // Write the values out to the acc arrays
-        Avx2.Store (NativePtr.add accStartsPtr accIdx, newStartsPacked)
-        Avx2.Store (NativePtr.add accBoundsPtr accIdx, newBoundsPacked)
-        
-        // Move the accIdx forward so that we write new matches to the correct spot
-        accIdx <- accIdx + numberOfMatches
-        
-        
-        ()
+        resStarts, resBounds
         
 
 
 [<EntryPoint>]
 let main (args: string[]) =
-    Logic.test()
+    let _ = Logic.test()
     1
