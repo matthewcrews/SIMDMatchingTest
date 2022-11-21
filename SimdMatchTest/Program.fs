@@ -41,11 +41,30 @@ module Logic =
         bStarts, bBounds
     
     let leftCompactShuffleMasks =
+        let remv = 0x80_80_80_80 // Remove values
+        let pos0 = 0x00_01_02_03 // 0th position
+        let pos1 = 0x04_05_06_07 // 1st position
+        let pos2 = 0x08_09_0A_0B // 2nd position
+        let pos3 = 0x0C_0D_0E_0F // 3rd position
+        
         [|
-            Vector128.Create (0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy)
-            Vector128.Create (0x0uy, 0x1uy, 0x2uy, 0x3uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy, 0x80uy)
+            Vector128.Create (remv, remv, remv, remv) // BitMask Pattern: 0000
+            Vector128.Create (pos0, remv, remv, remv) // BitMask Pattern: 0001
+            Vector128.Create (remv, remv, pos0, remv)// BitMask Pattern: 0010
+            Vector128.Create (remv, remv, pos0, pos1)// BitMask Pattern: 0011
+            Vector128.Create (remv, pos0, remv, remv)// BitMask Pattern: 0100
+            Vector128.Create (remv, pos0, remv, pos1)// BitMask Pattern: 0101
+            Vector128.Create (remv, pos0, pos1, remv)// BitMask Pattern: 0110
+            Vector128.Create (remv, pos0, pos1, pos3)// BitMask Pattern: 0111
+            Vector128.Create (pos0, remv, remv, remv)// BitMask Pattern: 1000
+            Vector128.Create (pos0, remv, remv, pos1)// BitMask Pattern: 1001
+            Vector128.Create (pos0, remv, pos1, remv)// BitMask Pattern: 1010
+            Vector128.Create (pos0, remv, pos1, pos2)// BitMask Pattern: 1011
+            Vector128.Create (pos0, pos1, remv, remv)// BitMask Pattern: 1100
+            Vector128.Create (pos0, pos1, remv, pos2)// BitMask Pattern: 1101
+            Vector128.Create (pos0, pos1, pos2, remv)// BitMask Pattern: 1110
+            Vector128.Create (pos0, pos1, pos2, pos3)// BitMask Pattern: 1111
             
-            Vector128.Create (0x0uy, 0x1uy, 0x2uy, 0x3uy, 0x4uy, 0x5uy, 0x6uy, 0x7uy, 0x8uy, 0x9uy, 0xauy, 0xbuy, 0xcuy, 0xduy, 0xeuy, 0xfuy)
         |]
     
     let test () =
