@@ -40,30 +40,31 @@ module Logic =
     
     let leftCompactShuffleMasks : Vector128<byte>[] =
         // NOTE: Remember x86 is little-endian therefore we need to select
-        let remv = 0x80_80_80_80 // Remove values
-        let pos0 = 0x03_02_01_00 // 0th position
-        let pos1 = 0x07_06_05_04 // 1st position
-        let pos2 = 0x0B_0A_09_08 // 2nd position
-        let pos3 = 0x0F_0E_0D_0C // 3rd position
+        // Also note, we are using this with Shuffle, which should be thought
+        // of as a Selector of the elements, not masking elements off.
+        let zero = 0x80_80_80_80 // Remove values
+        let elm0 = 0x03_02_01_00 // 0th position
+        let elm1 = 0x07_06_05_04 // 1st position
+        let elm2 = 0x0B_0A_09_08 // 2nd position
+        let elm3 = 0x0F_0E_0D_0C // 3rd position
         
         retype [|
-            Vector128.Create (remv, remv, remv, remv) // BitMask Pattern: 0000
-            Vector128.Create (pos0, remv, remv, remv) // BitMask Pattern: 0001
-            Vector128.Create (remv, pos0, remv, remv) // BitMask Pattern: 0010
-            Vector128.Create (pos0, pos1, remv, remv) // BitMask Pattern: 0011
-            Vector128.Create (remv, remv, pos0, remv) // BitMask Pattern: 0100
-            Vector128.Create (pos0, remv, pos0, remv) // BitMask Pattern: 0101
-            Vector128.Create (remv, pos0, pos1, remv) // BitMask Pattern: 0110
-            Vector128.Create (pos0, pos1, pos2, remv) // BitMask Pattern: 0111
-            Vector128.Create (remv, remv, remv, pos0) // BitMask Pattern: 1000
-            Vector128.Create (pos0, remv, remv, pos1) // BitMask Pattern: 1001
-            Vector128.Create (remv, pos0, remv, pos1) // BitMask Pattern: 1010
-            Vector128.Create (pos0, pos1, remv, pos2) // BitMask Pattern: 1011
-            Vector128.Create (remv, remv, pos0, pos1) // BitMask Pattern: 1100
-            Vector128.Create (pos0, remv, pos1, pos2) // BitMask Pattern: 1101
-            Vector128.Create (remv, pos0, pos1, pos2) // BitMask Pattern: 1110
-            Vector128.Create (pos0, pos1, pos2, pos3) // BitMask Pattern: 1111
-            
+            Vector128.Create (zero, zero, zero, zero) // BitMask Pattern: 0000
+            Vector128.Create (elm0, zero, zero, zero) // BitMask Pattern: 0001
+            Vector128.Create (elm1, zero, zero, zero) // BitMask Pattern: 0010
+            Vector128.Create (elm0, elm1, zero, zero) // BitMask Pattern: 0011
+            Vector128.Create (elm2, zero, zero, zero) // BitMask Pattern: 0100
+            Vector128.Create (elm0, elm2, zero, zero) // BitMask Pattern: 0101
+            Vector128.Create (elm1, elm2, zero, zero) // BitMask Pattern: 0110
+            Vector128.Create (elm0, elm1, elm2, zero) // BitMask Pattern: 0111
+            Vector128.Create (elm3, zero, zero, zero) // BitMask Pattern: 1000
+            Vector128.Create (elm0, elm3, zero, zero) // BitMask Pattern: 1001
+            Vector128.Create (elm1, elm3, zero, zero) // BitMask Pattern: 1010
+            Vector128.Create (elm0, elm1, elm3, zero) // BitMask Pattern: 1011
+            Vector128.Create (elm2, elm3, zero, zero) // BitMask Pattern: 1100
+            Vector128.Create (elm0, elm2, elm3, zero) // BitMask Pattern: 1101
+            Vector128.Create (elm1, elm2, elm3, zero) // BitMask Pattern: 1110
+            Vector128.Create (elm0, elm1, elm2, elm3) // BitMask Pattern: 1111
         |]
     
     let test () =
