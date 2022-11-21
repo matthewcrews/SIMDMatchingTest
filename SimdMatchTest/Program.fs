@@ -16,6 +16,8 @@ module Logic =
     let aStarts, aBounds =
         let data = [|
             2, 10
+            26, 28
+            30, 37
         |]        
         let aStarts = data |> Array.map fst
         let aBounds = data |> Array.map snd
